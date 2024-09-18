@@ -42,7 +42,7 @@ def blenddtfp(graph, task, popularity_skill):
             skilld = min([(skl, bs[skl]) for skl in dtask], key=lambda x: len(x[1]))
             cskls = []
             for exprt in list(support[skilld[0]]):
-                cskls.append((exprt, (len(expertise[exprt]) / nx.dijkstra_path_length(graph, expert, exprt))))
+                cskls.append((exprt, ( len(set(expertise[exprt]).union(expertise[expert]))/ nx.dijkstra_path_length(graph, expert, exprt))))
             cv = max(cskls, key=lambda x: x[1])
             for skill in set(set(task).difference(Tc)).intersection(expertise[cv[0]]):
                 team.append((cv[0], skill))
@@ -58,7 +58,7 @@ def blenddtfp(graph, task, popularity_skill):
     return best_team, time.time_ns() - start
 
 
-def pplrtdtfp(graph, task):
+def pplrtdtfp(graph, task, popularity_skill):
     '''
     Popularity of skill based diverse team formation problem
     :return:
@@ -71,38 +71,39 @@ def pplrtdtfp(graph, task):
             skls = set(graph.nodes[node]["skills"].split(","))
             expertise[node] = skls
             uskills.update(skls)
-    support = {skill: set() for skill in uskills}
-    for node in list(graph.nodes):
-        if len(graph.nodes[node]) > 0 and "skills" in graph.nodes[node]:
-            skls = set(graph.nodes[node]["skills"].split(","))
-            for skl in skls:
-                support[skl].add((node))
     teams = []
-    lps = min([(skl, support[skl]) for skl in task], key=lambda x: len(x[1]))
-    for expert in support[lps[0]]:
+    dbs = popularity_skill.copy()
+    lps = min([(skl, popularity_skill[skl]) for skl in task], key=lambda x: len(x[1]))
+    del dbs[lps[0]]
+    for expert in popularity_skill[lps[0]]:
         dtask = task.copy()
         team = []
-        Tc = []
-        Tc.append(lps[0])
-        team.append(expert)
-        dtask.remove(lps[0])
+        Tc = []  # Task(skills) covered
+        team.append((expert, ""))
+        for skill in set(task).intersection(expertise[expert]):
+            team.append((expert, skill))
+            dtask.remove(skill)
+            Tc.append(skill)
         while (len(Tc) != len(task)):
-            clbs = min([(skl, support[skl]) for skl in dtask], key=lambda x: len(x[1]))
+            skilld = min([(skl, popularity_skill[skl]) for skl in dtask], key=lambda x: len(x[1]))
             cskls = []
-            for exprt in list(support[clbs[0]]):
-                cskls.append((exprt, expertise[exprt]))
-            cv = max(cskls, key=lambda x: len(x[1]))
-            team.append((cv[0]))
-            Tc.append(expertise[cv[0]].intersection(set(dtask)))
-            dtask.remove(clbs[0])
+            for exprt in list(popularity_skill[skilld[0]]):
+                # cskls.append((exprt, (len(expertise[exprt]) / nx.dijkstra_path_length(graph, expert, exprt))))
+                cskls.append((exprt, ( len(expertise[exprt]) /
+                                       nx.dijkstra_path_length(graph, expert, exprt))))
+            cv = max(cskls, key=lambda x: x[1])
+            for skill in set(set(task).difference(Tc)).intersection(expertise[cv[0]]):
+                team.append((cv[0], skill))
+                dtask.remove(skill)
+                Tc.append(skill)
         teams.append(team)
-    cgama = 0
+    cshann_div = 0
     best_team = []
     for team in teams:
-        task_size, gama_div, diameter_d, sum_distnc, Inv_ginisimpson_div, shannon_div = fitness(graph, team, task)
-        if cgama < gama_div:
+        shann_div = shannon_diversity(graph, team, task)
+        if cshann_div < shann_div:
             best_team = team
-    return fitness(graph, best_team, task), time.time_ns() - start, best_team
+    return best_team, time.time_ns() - start
 
 
 def gamma_diversity(graph, team, task):
@@ -124,7 +125,8 @@ def shannon_diversity(graph, team, task):
     shnn_sum = 0
     import math
     for skill in total_skills.keys():
-        shnn_sum += (len(total_skills[skill]) / len(team) * math.log(len(total_skills[skill]) / len(team)))
+        p = len(total_skills[skill]) / len(team)
+        shnn_sum += p * math.log10(p)
     return -1 * shnn_sum
 
 
@@ -148,6 +150,7 @@ def inverse_gini_simpson_diversisty(graph, team, task):
 def fitness(graph, team, task):
     pass
 
+
 # Example fitness function: Sum of the values (modify as needed)
 # sd = sum_distance(graph, team, task)
 # tg = nx.Graph()
@@ -162,90 +165,93 @@ def fitness(graph, team, task):
 # 					cn = nd
 
 
-def aco(graph, task):
+def aco(graph, task, popularity_skill, distances):
     import networkx as nx
     import numpy as np
     # Initialize the best solution
-    best_path = None
-    best_length = float('inf')
+    start = time.time_ns()
     # ACO parameters
-    num_ants = 10
-    num_iterations = 100
-    alpha = 1.0  # Pheromone importance
-    beta = 1.0  # Distance importance
+    candidate_ants = [expert for skill in task for expert in popularity_skill[skill]]
+    num_ants = len(candidate_ants)
+
+    num_iterations = 50
+    alpha = 1.0  # Pheromone importance i.e. historical importance
+    beta = 1.0  # Distance importance i.e. evaluation importance
     evaporation_rate = 0.5
     pheromone_deposit = 1.0
-
+    expertise = {node: set() for node in graph.nodes}  # Dictionary:expert(key):list of skills(value) as strings
+    for node in list(graph.nodes):
+        if len(graph.nodes[node]) > 0 and "skills" in graph.nodes[node]:
+            skls = set(graph.nodes[node]["skills"].split(","))
+            expertise[node] = skls
     # Initialize pheromone levels
-    pheromones = np.ones((nx.number_of_nodes(graph), nx.number_of_nodes(graph)))
-    distances = []
-    for nd1 in list(graph.nodes):
-        dst = []
-        for nd2 in list(graph.nodes):
-            dst.append(nx.dijkstra_path_length(graph, nd1, nd2))
-        distances.append(dst)
-    print("hai")
+    phrmns = np.ones((nx.number_of_nodes(graph), nx.number_of_nodes(graph)))
+    import pandas as pd
+    pheromones = pd.DataFrame(phrmns, index=pd.Index([nd2 for nd2 in graph.nodes], name='RE'),
+                              columns=pd.Index([nd2 for nd2 in graph.nodes], name='CE'))
 
-    def choose_next_expert(pheromones, distances, visited, current_expert, alpha, beta):
-        probabilities = []
-        for city in range(len(pheromones)):
-            if city not in visited:
-                pheromone_level = pheromones[current_expert][city] ** alpha
-                distance = (1.0 / distances[current_expert][city]) ** beta
-                probabilities.append(pheromone_level * distance)
-            else:
-                probabilities.append(0)
-        probabilities = np.array(probabilities)
-        probabilities /= probabilities.sum()
-        return np.random.choice(range(len(pheromones)), p=probabilities)
 
-    def construct_solution(pheromones, distances, alpha, beta):
-        solution = []
+    def construct_team(pheromones, distances, alpha, beta):
+        import random
+        team = []
         visited = set()
-        current_city = np.random.randint(0, len(pheromones))
-        solution.append(current_city)
-        visited.add(current_city)
+        task_covered = []
+        current_skill = random.choice(task)
+        current_expert = random.choice(popularity_skill[current_skill])
+        while current_expert in visited:
+            current_expert = np.random.choice(candidate_ants)
+        else:
+            team.append((current_expert, ""))
+            visited.add(current_expert)
+            for skill in set(task).intersection(expertise[current_expert]):
+                team.append((current_expert, skill))
+                task_covered.append(skill)
 
-        while len(visited) < len(pheromones):
-            next_city = choose_next_expert(pheromones, distances, visited, current_city, alpha, beta)
-            solution.append(next_city)
-            visited.add(next_city)
-            current_city = next_city
-        return solution
+        for skill in set(task).difference(set(task_covered)):
+            task_covered.append(skill)
+            probabilities = []
+            team_expertise = set()
+            for xprt in team:
+                team_expertise.update(expertise[xprt[0]])
+            for expert in popularity_skill[skill]:
+                if expert in visited:
+                    if len(popularity_skill[skill]) == 1:
+                        probabilities.append(1.0)
+                    else:
+                        probabilities.append(0.0)
+                else:
+                    pheromone_level = pheromones.loc[current_expert, expert] ** alpha
+                    distance = (len(team_expertise.union(expertise[expert])) / distances.loc[current_expert, expert]) ** beta
+                    probabilities.append(pheromone_level * distance)
+                    pheromones.loc[current_expert, expert] += pheromone_deposit
+            probabilities = np.array(probabilities)
+            probabilities /= probabilities.sum()
+            next_expert = random.choices(popularity_skill[skill], weights=probabilities, k=1)[0]
+            team.append((next_expert, skill))
+            task_covered.append(skill)
+            visited.add(next_expert)
+            current_expert = next_expert
+        return team
 
-    def path_length(path, distances):
-        length = 0
-        for i in range(len(path) - 1):
-            length += distances[path[i]][path[i + 1]]
-        length += distances[path[-1]][path[0]]  # Return to the origin
-        return length
-
-    def update_pheromones(pheromones, solutions, distances, evaporation_rate, pheromone_deposit):
+    def update_pheromones(pheromones, evaporation_rate):
         # Evaporate pheromones
         pheromones *= (1 - evaporation_rate)
 
-        # Add new pheromones
-        for solution in solutions:
-            length = path_length(solution, distances)
-            for i in range(len(solution) - 1):
-                pheromones[solution[i]][solution[i + 1]] += pheromone_deposit / length
-            pheromones[solution[-1]][solution[0]] += pheromone_deposit / length
-
     for iteration in range(num_iterations):
-        solutions = []
+        teams = []
         for ant in range(num_ants):
-            solution = construct_solution(pheromones, distances, alpha, beta)
-            solutions.append(solution)
+            team = construct_team(pheromones, distances, alpha, beta)
+            teams.append(team)
+        update_pheromones(pheromones, evaporation_rate)
+        # print(f"Iteration {iteration + 1}, Best Length: {best_length}, team: {team} ")
+    current_inv_ginisimpson_div = 0
+    best_team = []
+    for team in teams:
+        inv_ginisimpson_div = inverse_gini_simpson_diversisty(graph, team, task)
+        if current_inv_ginisimpson_div < inv_ginisimpson_div:
+            best_team = team
+    return best_team, time.time_ns() - start
 
-            length = path_length(solution, distances)
-            if length < best_length:
-                best_length = length
-                best_path = solution
-
-        update_pheromones(pheromones, solutions, distances, evaporation_rate, pheromone_deposit)
-        print(f"Iteration {iteration + 1}, Best Length: {best_length}")
-    print("Best Path:", best_path)
-    print("Best Length:", best_length)
 
 
 def genetic_algo(graph, task, popularity_skill):
@@ -562,7 +568,7 @@ def minSD(graph, task, popularity_skill):
 
 def TPLRandom(graph, task, popularity_skill, hops, lmbda):  # twice of average degree
     """
-    return community based team formation using closest expert.
+    return team
     :param graph:
     :param task:
     :return:
@@ -628,7 +634,7 @@ def TPLRandom(graph, task, popularity_skill, hops, lmbda):  # twice of average d
 
 def TPLClosest(graph, task, popularity_skill, hops, lmbda):  # twice of average degree
     """
-    return community based team formation using closest expert.
+    return team
     :param graph:
     :param task:
     :return:
@@ -801,6 +807,8 @@ def leader_distance(graph, team) -> float:
 
 if __name__ == '__main__':
     tasks = []
+    import pandas as pd
+
     # Toy Example
     graph = nx.read_gml("/home/ramesh/dblp/input/icdt.gml")
     with open("/home/ramesh/dblp/input/icdt_tasks.txt") as file:
@@ -816,10 +824,16 @@ if __name__ == '__main__':
                 else:
                     popularity_skill[skill] = list()
                     popularity_skill[skill].append(node)
+    raw_data = {nd1: {nd2: 0 for nd2 in graph.nodes} for nd1 in graph.nodes}
+    distances = pd.DataFrame(raw_data, index=pd.Index([nd2 for nd2 in graph.nodes], name='RE'),
+                             columns=pd.Index([nd2 for nd2 in graph.nodes], name='CE'))
+    for nd1 in list(graph.nodes):
+        for nd2 in list(graph.nodes):
+            distances.loc[nd1, nd2] = nx.dijkstra_path_length(graph, nd1, nd2)
     for skill in popularity_skill:
         popularity_skill[skill] = list(set(popularity_skill[skill]))
     for task in tasks:
-        print(blenddtfp(graph, task, popularity_skill))
+        print(len(task),aco(graph, task, popularity_skill, distances))
 
 # database_name = "db"
 # network = nx.read_gml("/home/ramesh/diversity/input/" + database_name + ".gml")

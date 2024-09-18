@@ -74,7 +74,7 @@ def experiment():
                 "focs", "icml", "icdm", "vldb", "www", "kdd", "sigmod", "icde", "ai", "th", "db", "dm", "dblp"]
     for network in networks:
         print(network)
-        open("/home/ramesh/dblp/output/" + network + "_blend_teams.txt", "w").close()
+        open("/home/ramesh/dblp/output/" + network + "_popular_teams.txt", "w").close()
         graph = nx.read_gml("/home/ramesh/dblp/input/" + network + ".gml")
         tasks = []
         with open("/home/ramesh/dblp/input/" + network + "_tasks.txt") as file:
@@ -118,8 +118,8 @@ def experiment():
             # with open("/home/ramesh/dblp/output/" + network + "_cultural_teams.txt", "a") as file:
             # 	team, time = algorithms.cultural(graph, task, popularity_skill)
             # 	file.write(str(time) + "\t" + "\t".join('%s\t%s' % x for x in team) + "\n")
-            with open("/home/ramesh/dblp/output/" + network + "_blend_teams.txt", "a") as file:
-                team, time = algorithms.blenddtfp(graph, task, popularity_skill)
+            with open("/home/ramesh/dblp/output/" + network + "_popular_teams.txt", "a") as file:
+                team, time = algorithms.pplrtdtfp(graph, task, popularity_skill)
                 file.write(str(time) + "\t" + "\t".join('%s\t%s' % x for x in team) + "\n")
 
 
@@ -129,7 +129,7 @@ def make_results():
     #             "focs", "icml", "icdm", "vldb", "www", "kdd", "sigmod", "icde", "ai", "th", "db", "dm", "dblp"]
     ts = [i for i in range(4, 21)]
     for network in networks:
-        for algo in ["rarestfirst", "blend"]:
+        for algo in ["popular"]:
             graph = nx.read_gml("/home/ramesh/dblp/input/" + network + ".gml")
             open("/home/ramesh/dblp/output/" + network + "_" + algo + "_results.txt", "w").close()
             with open("/home/ramesh/dblp/output/" + network + "_" + algo + "_teams.txt") as file:
@@ -163,7 +163,7 @@ def analysis():
     #             "focs", "icml", "icdm", "vldb", "www", "kdd", "sigmod", "icde", "ai", "th", "db", "dm", "dblp"]
     ts = [i for i in range(4, 21)]
     for network in networks:
-        for algo in ["rarestfirst", "blend"]:
+        for algo in ["popular"]:
             open("/home/ramesh/dblp/output/" + network + "_" + algo + "_analysis.txt", "w").close()
             with open("/home/ramesh/dblp/output/" + network + "_" + algo + "_results.txt", "r") as file:
                 lc = 0

@@ -13,4 +13,6 @@ set terminal tikz standalone
 set output "/home/ramesh/dblp/output/eps/icdt_processing_time.tex"
 #set term eps
 #set output "/home/ramesh/dblp/output/eps/icdt_processing_time.eps"
-plot "/home/ramesh/dblp/output/icdt_blend_analysis.txt" using 1:6 with points pt 2 ps 2 title "Blend", "/home/ramesh/dblp/output/icdt_rarestfirst_analysis.txt" using 1:6 with points pt 3 ps 2 title "Rarestfirst"
+plot "/home/ramesh/dblp/output/icdt_blend_analysis.txt" using 1:7 with points pt 4 ps 2 title "Blend", \
+    "/home/ramesh/dblp/output/icdt_rarestfirst_analysis.txt" using 1:7 with points pt 2 ps 2 title "Rarestfirst", \
+    "/home/ramesh/dblp/output/icdt_popular_analysis.txt" using 1:7 with points pt 3 ps 2 title "Popular"
