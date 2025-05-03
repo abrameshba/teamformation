@@ -4,18 +4,18 @@ import time
 import networkx as nx
 
 
-def blenddtfp(graph, task, popularity_skill):
+def blenddtfp(graph, task, skill_popularity):
     '''
     Blend value of skill based diverse team formation problem
     :return:
     '''
     start = time.time_ns()
     uskills = set()  # Universal set of skills
-    expertise = {node: set() for node in graph.nodes}  # Dictionary:expert(key):list of skills(value) as strings
+    expert_skills = {node: set() for node in graph.nodes}  # Dictionary:expert(key):list of skills(value) as strings
     for node in list(graph.nodes):
         if len(graph.nodes[node]) > 0 and "skills" in graph.nodes[node]:
             skls = set(graph.nodes[node]["skills"].split(","))
-            expertise[node] = skls
+            expert_skills[node] = skls
             uskills.update(skls)
     bs = {skill: set() for skill in uskills}  # Blend value of skills, dictionary
     support = {skill: set() for skill in uskills}
@@ -34,7 +34,7 @@ def blenddtfp(graph, task, popularity_skill):
         team = []
         Tc = []  # Task(skills) covered
         team.append((expert, ""))
-        for skill in set(task).intersection(expertise[expert]):
+        for skill in set(task).intersection(expert_skills[expert]):
             team.append((expert, skill))
             dtask.remove(skill)
             Tc.append(skill)
@@ -42,9 +42,11 @@ def blenddtfp(graph, task, popularity_skill):
             skilld = min([(skl, bs[skl]) for skl in dtask], key=lambda x: len(x[1]))
             cskls = []
             for exprt in list(support[skilld[0]]):
-                cskls.append((exprt, ( len(set(expertise[exprt]).union(expertise[expert]))/ nx.dijkstra_path_length(graph, expert, exprt))))
+                cskls.append((exprt, (
+                            len(set(expert_skills[exprt]).union(expert_skills[expert])) /
+                            nx.dijkstra_path_length(graph, expert, exprt, weight='weight'))))
             cv = max(cskls, key=lambda x: x[1])
-            for skill in set(set(task).difference(Tc)).intersection(expertise[cv[0]]):
+            for skill in set(set(task).difference(Tc)).intersection(expert_skills[cv[0]]):
                 team.append((cv[0], skill))
                 dtask.remove(skill)
                 Tc.append(skill)
@@ -58,41 +60,41 @@ def blenddtfp(graph, task, popularity_skill):
     return best_team, time.time_ns() - start
 
 
-def pplrtdtfp(graph, task, popularity_skill):
+def pplrtdtfp(graph, task, skill_popularity):
     '''
     Popularity of skill based diverse team formation problem
     :return:
     '''
     start = time.time_ns()
     uskills = set()
-    expertise = {node: set() for node in graph.nodes}
+    expert_skills = {node: set() for node in graph.nodes}
     for node in list(graph.nodes):
         if len(graph.nodes[node]) > 0 and "skills" in graph.nodes[node]:
             skls = set(graph.nodes[node]["skills"].split(","))
-            expertise[node] = skls
+            expert_skills[node] = skls
             uskills.update(skls)
     teams = []
-    dbs = popularity_skill.copy()
-    lps = min([(skl, popularity_skill[skl]) for skl in task], key=lambda x: len(x[1]))
+    dbs = skill_popularity.copy()
+    lps = min([(skl, skill_popularity[skl]) for skl in task], key=lambda x: len(x[1]))
     del dbs[lps[0]]
-    for expert in popularity_skill[lps[0]]:
+    for expert in skill_popularity[lps[0]]:
         dtask = task.copy()
         team = []
         Tc = []  # Task(skills) covered
         team.append((expert, ""))
-        for skill in set(task).intersection(expertise[expert]):
+        for skill in set(task).intersection(expert_skills[expert]):
             team.append((expert, skill))
             dtask.remove(skill)
             Tc.append(skill)
-        while (len(Tc) != len(task)):
-            skilld = min([(skl, popularity_skill[skl]) for skl in dtask], key=lambda x: len(x[1]))
+        while len(Tc) != len(task):
+            skilld = min([(skl, skill_popularity[skl]) for skl in dtask], key=lambda x: len(x[1]))
             cskls = []
-            for exprt in list(popularity_skill[skilld[0]]):
-                # cskls.append((exprt, (len(expertise[exprt]) / nx.dijkstra_path_length(graph, expert, exprt))))
-                cskls.append((exprt, ( len(expertise[exprt]) /
-                                       nx.dijkstra_path_length(graph, expert, exprt))))
+            for exprt in list(skill_popularity[skilld[0]]):
+                # cskls.append((exprt, (len(expert_skills[exprt]) / nx.dijkstra_path_length(graph, expert, exprt, weight='weight'))))
+                cskls.append((exprt, (len(expert_skills[exprt]) /
+                                      nx.dijkstra_path_length(graph, expert, exprt, weight='weight'))))
             cv = max(cskls, key=lambda x: x[1])
-            for skill in set(set(task).difference(Tc)).intersection(expertise[cv[0]]):
+            for skill in set(set(task).difference(Tc)).intersection(expert_skills[cv[0]]):
                 team.append((cv[0], skill))
                 dtask.remove(skill)
                 Tc.append(skill)
@@ -157,7 +159,7 @@ def fitness(graph, team, task):
 # for u in team:
 # 	for v in team:
 # 		if u[0] in nx.nodes(graph) and v[0] in nx.nodes(graph) and nx.has_path(graph, u[0], v[0]):
-# 			sd += nx.dijkstra_path_length(graph, u[0], v[0])
+# 			sd += nx.dijkstra_path_length(graph, u[0], v[0], weight='weight')
 # 			cn = u[0]
 # 			for nd in nx.dijkstra_path(graph, cn, v[0]):
 # 				if cn != nd:
@@ -165,71 +167,65 @@ def fitness(graph, team, task):
 # 					cn = nd
 
 
-def aco(graph, task, popularity_skill, distances):
+def aco(graph, task, skill_popularity, distances):
     import networkx as nx
     import numpy as np
     # Initialize the best solution
     start = time.time_ns()
     # ACO parameters
-    candidate_ants = [expert for skill in task for expert in popularity_skill[skill]]
-    num_ants = len(candidate_ants)
+    candidate_ants = set(expert for skill in task for expert in skill_popularity[skill])
+    # num_ants = len(candidate_ants)
 
-    num_iterations = 50
+    num_iterations = 25
     alpha = 1.0  # Pheromone importance i.e. historical importance
-    beta = 1.0  # Distance importance i.e. evaluation importance
+    beta = 1.0  # Distance importance i.e. evoluation importance
     evaporation_rate = 0.5
     pheromone_deposit = 1.0
-    expertise = {node: set() for node in graph.nodes}  # Dictionary:expert(key):list of skills(value) as strings
-    for node in list(graph.nodes):
+    expert_skills = {node: set() for node in graph.nodes}  # Dictionary:expert(key):list of skills(value) as string
+    for node in candidate_ants:
         if len(graph.nodes[node]) > 0 and "skills" in graph.nodes[node]:
             skls = set(graph.nodes[node]["skills"].split(","))
-            expertise[node] = skls
+            expert_skills[node] = skls
     # Initialize pheromone levels
-    phrmns = np.ones((nx.number_of_nodes(graph), nx.number_of_nodes(graph)))
     import pandas as pd
-    pheromones = pd.DataFrame(phrmns, index=pd.Index([nd2 for nd2 in graph.nodes], name='RE'),
-                              columns=pd.Index([nd2 for nd2 in graph.nodes], name='CE'))
+    pheromones = pd.DataFrame(np.ones((len(candidate_ants), len(candidate_ants))),
+                              index=pd.Index([nd for nd in candidate_ants], name='RE'),
+                              columns=pd.Index([nd for nd in candidate_ants], name='CE'))
+    teams = []
 
-
-    def construct_team(pheromones, distances, alpha, beta):
+    def construct_team(pheromones, distances, alpha, beta, current_expert):
         import random
         team = []
-        visited = set()
         task_covered = []
-        current_skill = random.choice(task)
-        current_expert = random.choice(popularity_skill[current_skill])
-        while current_expert in visited:
-            current_expert = np.random.choice(candidate_ants)
-        else:
-            team.append((current_expert, ""))
-            visited.add(current_expert)
-            for skill in set(task).intersection(expertise[current_expert]):
-                team.append((current_expert, skill))
-                task_covered.append(skill)
-
-        for skill in set(task).difference(set(task_covered)):
-            task_covered.append(skill)
+        team.append((current_expert, ""))
+        for skil in set(task).intersection(expert_skills[current_expert]):
+            team.append((current_expert, skil))
+            task_covered.append(skil)
+        team_skills = set()
+        team_skills.update(expert_skills[current_expert])
+        while len(task) > len(task_covered):
+            skill = random.choice(list(set(task).difference(task_covered)))
             probabilities = []
-            team_expertise = set()
-            for xprt in team:
-                team_expertise.update(expertise[xprt[0]])
-            for expert in popularity_skill[skill]:
-                if expert in visited:
-                    if len(popularity_skill[skill]) == 1:
-                        probabilities.append(1.0)
-                    else:
-                        probabilities.append(0.0)
+            # print(skill, len(skill_popularity[skill]), current_expert)
+            for expert in skill_popularity[skill]:
+                if current_expert == expert:
+                    probabilities.append(0.0)
                 else:
                     pheromone_level = pheromones.loc[current_expert, expert] ** alpha
-                    distance = (len(team_expertise.union(expertise[expert])) / distances.loc[current_expert, expert]) ** beta
+                    distance = (len(team_skills.union(expert_skills[expert])) / distances.loc[
+                        current_expert, expert]) ** beta
                     probabilities.append(pheromone_level * distance)
                     pheromones.loc[current_expert, expert] += pheromone_deposit
             probabilities = np.array(probabilities)
-            probabilities /= probabilities.sum()
-            next_expert = random.choices(popularity_skill[skill], weights=probabilities, k=1)[0]
-            team.append((next_expert, skill))
-            task_covered.append(skill)
-            visited.add(next_expert)
+            if probabilities.sum() == 0:
+                probabilities = np.ones_like(probabilities) / len(probabilities)
+            else:
+                probabilities /= probabilities.sum()
+            next_expert = np.random.choice(skill_popularity[skill], p=probabilities)
+            team_skills.update(expert_skills[next_expert])
+            for skils in set(task).difference(task_covered).intersection(expert_skills[next_expert]):
+                team.append((next_expert, skils))
+                task_covered.append(skils)
             current_expert = next_expert
         return team
 
@@ -238,12 +234,12 @@ def aco(graph, task, popularity_skill, distances):
         pheromones *= (1 - evaporation_rate)
 
     for iteration in range(num_iterations):
-        teams = []
-        for ant in range(num_ants):
-            team = construct_team(pheromones, distances, alpha, beta)
+        # print(f"Iteration {iteration + 1}")
+        for ant in candidate_ants:
+            team = construct_team(pheromones, distances, alpha, beta, ant)
+            update_pheromones(pheromones, evaporation_rate)
             teams.append(team)
-        update_pheromones(pheromones, evaporation_rate)
-        # print(f"Iteration {iteration + 1}, Best Length: {best_length}, team: {team} ")
+        # print(f"Iteration {iteration + 1}, team: {team} ")
     current_inv_ginisimpson_div = 0
     best_team = []
     for team in teams:
@@ -253,10 +249,10 @@ def aco(graph, task, popularity_skill, distances):
     return best_team, time.time_ns() - start
 
 
-
-def genetic_algo(graph, task, popularity_skill):
+def genetic_algo(graph, task, skill_popularity):
     """
     returns team of experts with minimum leader distance
+    :param skill_popularity:
     :param graph:
     :param task:
     :return Team :
@@ -271,7 +267,7 @@ def genetic_algo(graph, task, popularity_skill):
     sol_per_pop = 10
     num_genes = len(task)
     num_elite_teams = 2
-    gene_space = [[int(expert) for expert in popularity_skill[skill]] for skill in task]
+    gene_space = [[int(expert) for expert in skill_popularity[skill]] for skill in task]
 
     parent_selection_type = "rank"
     keep_parents = 2
@@ -286,7 +282,7 @@ def genetic_algo(graph, task, popularity_skill):
         for _ in range(sol_per_pop):
             sol = []
             for skill in task:
-                sol.append(np.random.choice(popularity_skill[skill], 1, True)[0])
+                sol.append(np.random.choice(skill_popularity[skill], 1, True)[0])
             initial_population.append(sol)
         initial_population.sort()
         ga_instance.initial_population = initial_population
@@ -299,7 +295,7 @@ def genetic_algo(graph, task, popularity_skill):
         teamt = []
         teamt.append((solution[0], ''))
         for skill in task:
-            for expert in popularity_skill[skill]:
+            for expert in skill_popularity[skill]:
                 if int(expert) in solution:
                     teamt.append((expert, skill))
                     break
@@ -356,7 +352,7 @@ def genetic_algo(graph, task, popularity_skill):
         solution, solution_fitness, solution_idx = ga_instance.best_solution()
         best_team.append((solution[0], ''))
         for skill in task:
-            for expert in popularity_skill[skill]:
+            for expert in skill_popularity[skill]:
                 if int(expert) in solution:
                     best_team.append((expert, skill))
                     break
@@ -364,9 +360,10 @@ def genetic_algo(graph, task, popularity_skill):
     return best_team, time.time_ns() - start
 
 
-def cultural(graph, task, popularity_skill):
+def cultural(graph, task, skill_popularity):
     """
     returns team of experts with minimum leader distance
+    :param skill_popularity:
     :param graph:
     :param task:
     :return Team :
@@ -381,7 +378,7 @@ def cultural(graph, task, popularity_skill):
     sol_per_pop = 10
     num_genes = len(task)
     num_elite_teams = 2
-    gene_space = [[int(expert) for expert in popularity_skill[skill]] for skill in task]
+    gene_space = [[int(expert) for expert in skill_popularity[skill]] for skill in task]
     parent_selection_type = "rank"
     keep_parents = 2
 
@@ -395,7 +392,7 @@ def cultural(graph, task, popularity_skill):
         for _ in range(sol_per_pop):
             sol = []
             for skill in task:
-                sol.append(np.random.choice(popularity_skill[skill], 1, True)[0])
+                sol.append(np.random.choice(skill_popularity[skill], 1, True)[0])
             initial_population.append(sol)
         initial_population.sort()
         ga_instance.initial_population = initial_population
@@ -408,7 +405,7 @@ def cultural(graph, task, popularity_skill):
         teamt = []
         teamt.append((solution[0], ''))
         for skill in task:
-            for expert in popularity_skill[skill]:
+            for expert in skill_popularity[skill]:
                 if int(expert) in solution:
                     teamt.append((expert, skill))
                     break
@@ -475,7 +472,7 @@ def cultural(graph, task, popularity_skill):
         solution, solution_fitness, solution_idx = ga_instance.best_solution()
         best_team.append((solution[0], ''))
         for skill in task:
-            for expert in popularity_skill[skill]:
+            for expert in skill_popularity[skill]:
                 if int(expert) in solution:
                     best_team.append((expert, skill))
                     break
@@ -494,9 +491,10 @@ def cultural(graph, task, popularity_skill):
 # 			influence_source = random.choice(self.belief_space)
 # 			individual.team = influence_source.team
 
-def minLD(graph, task, popularity_skill):
+def minLD(graph, task, skill_popularity):
     """
     returns team of experts with minimum leader distance
+    :param skill_popularity:
     :param graph:
     :param task:
     :return Team :
@@ -512,7 +510,7 @@ def minLD(graph, task, popularity_skill):
         for skill in task:
             close_distance = sys.maxsize
             closest_expert = ""
-            for expert in popularity_skill[skill]:
+            for expert in skill_popularity[skill]:
                 if nx.has_path(graph, leader, expert):
                     distance = nx.dijkstra_path_length(graph, leader, expert, weight="weight")
                     if close_distance > distance:
@@ -528,9 +526,10 @@ def minLD(graph, task, popularity_skill):
     return best_team, time.time_ns() - start
 
 
-def minSD(graph, task, popularity_skill):
+def minSD(graph, task, skill_popularity):
     """
     returns team of experts with minimum leader distance
+    :param skill_popularity:
     :param graph:
     :param task:
     :return Team :
@@ -541,7 +540,7 @@ def minSD(graph, task, popularity_skill):
     best_team = []
     best_sd = sys.maxsize
     for skill1 in task:
-        for leader in popularity_skill[skill1]:
+        for leader in skill_popularity[skill1]:
             team = []
             dtask = task.copy()
             team.append((leader, ""))
@@ -550,7 +549,7 @@ def minSD(graph, task, popularity_skill):
             for skill2 in dtask:
                 close_distance = sys.maxsize
                 closest_expert = ""
-                for expert in popularity_skill[skill2]:
+                for expert in skill_popularity[skill2]:
                     if nx.has_path(graph, leader, expert):
                         distance = nx.dijkstra_path_length(graph, leader, expert, weight="weight")
                         if close_distance > distance:
@@ -566,9 +565,12 @@ def minSD(graph, task, popularity_skill):
     return best_team, time.time_ns() - start
 
 
-def TPLRandom(graph, task, popularity_skill, hops, lmbda):  # twice of average degree
+def TPLRandom(graph, task, skill_popularity, hops, lmbda):  # twice of average degree
     """
     return team
+    :param lmbda:
+    :param hops:
+    :param skill_popularity:
     :param graph:
     :param task:
     :return:
@@ -618,7 +620,7 @@ def TPLRandom(graph, task, popularity_skill, hops, lmbda):  # twice of average d
         tsk_lst = list(dtask)
         while len(tsk_lst) > 0:
             skill = random.choice(tsk_lst)
-            random_expert = random.choice(popularity_skill[skill])
+            random_expert = random.choice(skill_popularity[skill])
             team.append((random_expert, skill))
             random_experts.append((random_expert, skill))
             tsk_lst.remove(skill)
@@ -632,9 +634,12 @@ def TPLRandom(graph, task, popularity_skill, hops, lmbda):  # twice of average d
     return best_team, best_random, time.time_ns() - start
 
 
-def TPLClosest(graph, task, popularity_skill, hops, lmbda):  # twice of average degree
+def TPLClosest(graph, task, skill_popularity, hops, lmbda):  # twice of average degree
     """
     return team
+    :param lmbda:
+    :param hops:
+    :param skill_popularity:
     :param graph:
     :param task:
     :return:
@@ -686,7 +691,7 @@ def TPLClosest(graph, task, popularity_skill, hops, lmbda):  # twice of average 
             skill = random.choice(tsk_lst)
             close_distance = sys.maxsize
             closest_expert = ""
-            for expert in popularity_skill[skill]:
+            for expert in skill_popularity[skill]:
                 if nx.has_path(graph, leader, expert):
                     distance = nx.dijkstra_path_length(graph, leader, expert, weight="weight")
                     if close_distance > distance:
@@ -713,9 +718,10 @@ def within_k_nbrs(grap, start, k):
     return nbrs
 
 
-def rarestfirst(graph, task, popularity_skill):
+def rarestfirst(graph, task, skill_popularity):
     """
     returns team of experts with minimum diameter distance
+    :param skill_popularity:
     :param graph:
     :param task:
     :return tuple(set, dictionary, string):
@@ -727,10 +733,10 @@ def rarestfirst(graph, task, popularity_skill):
     skill_support = 0
     best_team = []
     for skill in task:
-        if len(popularity_skill[skill]) > skill_support:
-            skill_support = len(popularity_skill[skill])
+        if len(skill_popularity[skill]) > skill_support:
+            skill_support = len(skill_popularity[skill])
             rareskill = skill
-    for leader in popularity_skill[rareskill]:
+    for leader in skill_popularity[rareskill]:
         team = []
         team.append((leader, ""))
         team.append((leader, rareskill))
@@ -738,7 +744,7 @@ def rarestfirst(graph, task, popularity_skill):
             if skill != rareskill:
                 close_distance = sys.maxsize
                 closest_expert = ""
-                for expert in popularity_skill[skill]:
+                for expert in skill_popularity[skill]:
                     if nx.has_path(graph, leader, expert):
                         distance = nx.dijkstra_path_length(graph, leader, expert, weight="weight")
                         if close_distance > distance:
@@ -763,7 +769,7 @@ def diameter_distance(graph, team) -> float:
         for node in nx.dijkstra_path(graph, leader, expert, weight="weight"):
             team_nodes.add(node)
     team_graph = nx.subgraph(graph, team_nodes).copy()
-    return nx.diameter(team_graph, weight="weight")
+    return nx.diameter(team_graph)
 
 
 def sum_distance(graph, team, task) -> float:
@@ -789,6 +795,7 @@ def sum_distance(graph, team, task) -> float:
 def leader_distance(graph, team) -> float:
     """
     return leader distance of team i.e. (leader, team_member) pairs
+    :param team:
     :param graph:
     :return:
     """
@@ -815,25 +822,30 @@ if __name__ == '__main__':
         for line in file:
             task = [x for x in line.strip("\n").split("\t") if x]
             tasks.append(task)
-    popularity_skill = dict()  # experts_for_skill i.e. skill:list of experts
+    skill_popularity = dict()  # experts_for_skill i.e. skill:list of experts
     for node in graph.nodes:
         if "skills" in graph.nodes[node]:
             for skill in graph.nodes[node]["skills"].split(","):
-                if skill in popularity_skill:
-                    popularity_skill[skill].append(node)
+                if skill in skill_popularity:
+                    skill_popularity[skill].append(node)
                 else:
-                    popularity_skill[skill] = list()
-                    popularity_skill[skill].append(node)
+                    skill_popularity[skill] = list()
+                    skill_popularity[skill].append(node)
+    import json
+
     raw_data = {nd1: {nd2: 0 for nd2 in graph.nodes} for nd1 in graph.nodes}
     distances = pd.DataFrame(raw_data, index=pd.Index([nd2 for nd2 in graph.nodes], name='RE'),
                              columns=pd.Index([nd2 for nd2 in graph.nodes], name='CE'))
     for nd1 in list(graph.nodes):
         for nd2 in list(graph.nodes):
-            distances.loc[nd1, nd2] = nx.dijkstra_path_length(graph, nd1, nd2)
-    for skill in popularity_skill:
-        popularity_skill[skill] = list(set(popularity_skill[skill]))
+            distances.loc[nd1, nd2] = nx.dijkstra_path_length(graph, nd1, nd2, weight='weight')
+    for skill in skill_popularity:
+        skill_popularity[skill] = list(set(skill_popularity[skill]))
+    with open('skill_popularity.txt', 'w') as file:
+        file.write(json.dumps(skill_popularity))
     for task in tasks:
-        print(len(task),aco(graph, task, popularity_skill, distances))
+        print(len(task), task)
+        print(aco(graph, task, skill_popularity, distances))
 
 # database_name = "db"
 # network = nx.read_gml("/home/ramesh/diversity/input/" + database_name + ".gml")
