@@ -32,12 +32,12 @@ def sum_distance(graph, team, task) -> float:
 
 
 # Generate an initial population (random node subsets)
-def initialize_population(pop_size, task):
+def initialize_population(population_size, task):
     initial_population = []
-    for _ in range(pop_size):
+    for _ in range(population_size):
         sol = []
         for skill in task:
-            sol.append([np.random.choice(list(skill_popularity[skill]), 1, True)[0], skill])
+            sol.append([np.random.choice(list(popularity[skill]), 1, True)[0], skill])
         initial_population.append(sol)
     return initial_population
 
@@ -54,7 +54,7 @@ def crossover(parent1, parent2):
 def mutate(individual, mutation_rate=0.1):
     skill_list = []
     for skill in task:
-        if len(skill_popularity[skill]) > 1:
+        if len(popularity[skill]) > 1:
             skill_list.append(skill)
     if len(skill_list)>0:
         choosen_skill = random.choice(skill_list)
@@ -63,7 +63,7 @@ def mutate(individual, mutation_rate=0.1):
             for pt in individual:
                 i+=1
                 if pt[1]==choosen_skill:
-                    individual[i][0] = random.choice(list(skill_popularity[choosen_skill]))
+                    individual[i][0] = random.choice(list(popularity[choosen_skill]))
                     break
     return individual
 
@@ -95,11 +95,9 @@ def non_dominated_sorting(population, fitness_values):
             # If q dominates p, increase the domination count of p
             elif q_dominates_p and not p_dominates_q:
                 domination_counts[p] += 1
-
         # If p is non-dominated (i.e., dominated_count[p] == 0), add it to the first front
         if domination_counts[p] == 0:
             fronts[0].append(p)
-
     # Build subsequent fronts
     current_front = 0
     while fronts[current_front]:
@@ -111,7 +109,6 @@ def non_dominated_sorting(population, fitness_values):
                     next_front.append(q)  # If q becomes non-dominated, add it to the next front
         current_front += 1
         fronts.append(next_front)
-
     # Remove the last empty front
     if not fronts[-1]:
         fronts.pop()
@@ -147,7 +144,6 @@ def crowding_distance(population, fitness_values, front):
 def selection(population, fitness_values, num_offspring):
     fronts = non_dominated_sorting(population, fitness_values)
     new_population = []
-
     for front in fronts:
         if len(new_population) + len(front) > num_offspring:
             distances = crowding_distance(population, fitness_values, front)
@@ -157,7 +153,6 @@ def selection(population, fitness_values, num_offspring):
             break
         else:
             new_population.extend([population[i] for i in front])
-
     return new_population
 
 def unique_teams(listofteams):
@@ -219,17 +214,17 @@ for network in networks:
     graph = nx.read_gml("/home/ramesh/dblp/input/" + network + ".gml")
     with open("/home/ramesh/dblp/input/" + network + "_tasks.txt") as file:
         for line in file:
-            task = [x for x in line.strip("\n").split("\t") if x]
+            task = [x.strip() for x in line.strip("\n").split("\t") if x]
             tasks.append(task)
-    skill_popularity = dict()  # experts_for_skill i.e. skill:list of experts
+    popularity = dict()  # experts_for_skill i.e. skill:list of experts
     for node in graph.nodes:
         if "skills" in graph.nodes[node]:
             for skill in graph.nodes[node]["skills"].split(","):
-                if skill in skill_popularity:
-                    skill_popularity[skill].add(node)
+                if skill in popularity:
+                    popularity[skill].add(node)
                 else:
-                    skill_popularity[skill] = set()
-                    skill_popularity[skill].add(node)
+                    popularity[skill] = set()
+                    popularity[skill].add(node)
     open("/home/ramesh/dblp/output/" + network + "_nsga2_teams_all.txt", "w").close()
     i = 0
     for task in tasks:

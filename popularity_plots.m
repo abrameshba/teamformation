@@ -13,20 +13,15 @@ set logscale xy
 set arrow from avg,STATS_min_y to avg,STATS_max_y heads dt "."
 set arrow from avg,STATS_max_y/2 to avg*2,STATS_max_y/2
 set arrow from avg,STATS_min_y*2 to avg/2,STATS_min_y*2
-set label "popular skills" at avg*2,STATS_max_y/2
-set label "rare skills" at avg/6,STATS_min_y*2
+set label "Popular skills" at avg*2,STATS_max_y/2
+set label "Rare skills" at avg/6,STATS_min_y*2
 set label sprintf("avg-pop = %3.2f",avg) at avg/2,STATS_max_y+15
 set output '/home/ramesh/dblp/output/eps/'.network.'-popularity-pl.eps'
 a=10
 b=.10
-set fit quiet
-#set style data histograms
-#set style histogram cluster
-#set style fill solid 0.5 border lt -1
 fn(x) = a*x**(-b)
 fit fn(x) '/home/ramesh/dblp/output/'.network.'_popularity_summary.txt' via a, b
-plot    '/home/ramesh/dblp/output/'.network.'_popularity_summary.txt' using (($1>0)? $1 : 1/0):2  with point pointtype 3 pointsize 2 lc rgb "#0000FF" title "Popularity of a skill"
-#, fn(x) title "popularity"  lt 2 lw 1
+plot    '/home/ramesh/dblp/output/'.network.'_popularity_summary.txt' using (($1>0)? $1 : 1/0):2  with point pointtype 3 pointsize 2 lc rgb "#0000FF" title "Popularity of a skill", fn(x) title "popularity"  lt 2 lw 1
 #print(network)
 #print(a)
 #print(b)

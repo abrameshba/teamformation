@@ -1,3 +1,5 @@
+from collections import defaultdict
+
 import networkx as nx
 import matplotlib.pyplot as plt
 
@@ -14,4 +16,23 @@ def construct_toy():
 	nx.draw(graph, with_labels=True)
 	plt.show()
 	nx.write_gml(graph, "/home/ramesh/diversity/input/toy.gml")
-construct_toy()
+# construct_toy()
+
+def myutil():
+	networks = ["icdt", "colt", "pods", "pkdd", "ecml", "sdm", "stacs", "uai", "edbt", "stoc", "soda",
+				"focs", "icml", "icdm", "vldb", "www", "kdd", "sigmod", "icde", "ai", "th", "db", "dm", "dblp"]
+	for network in networks:
+		expertise = defaultdict()
+		graph = nx.read_gml("/home/ramesh/dblp/input/" + network + ".gml")
+		for node in list(graph.nodes):
+			if len(graph.nodes[node]) > 0 and "skills" in graph.nodes[node]:
+				skls = set(graph.nodes[node]["skills"].split(","))
+				if len(skls) in expertise:
+					expertise[len(skls)]+=1
+				else:
+					expertise[len(skls)] = 1
+		with open("/home/ramesh/dblp/output/" + network + "_expertise_summary.txt", "w") as file:
+			for key in expertise:
+				file.write(str(key)+"\t"+str(expertise[key])+"\n")
+
+myutil()
